@@ -1,4 +1,4 @@
-import { Errback, NextFunction, Request, Response } from "express";
+import type { Errback, NextFunction, Request, Response } from "express";
 
 export const globalErrorHandler = (
     err: Errback,
