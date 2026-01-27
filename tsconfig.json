@@ -3,7 +3,7 @@
         "target": "ES2022",
         "module": "ESNext",
         "moduleResolution": "Bundler",
-
+        "typeRoots": ["@types", "./node_module/@types"],
         "strict": true,
         "esModuleInterop": true,
         "skipLibCheck": true,
