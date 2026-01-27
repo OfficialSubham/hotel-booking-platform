@@ -6,6 +6,9 @@ import { compare, hash } from "bcryptjs";
 import { LoginSchema, SignupSchema } from "./schema/UserSchema";
 import { prisma } from "./db/db";
 import jwt from "jsonwebtoken";
+import { verifyUser } from "./middlewares/verifyUser";
+import { requireRole } from "./middlewares/requireRole";
+import { HotelSchema } from "./schema/HotelSchema";
 
 const { sign } = jwt;
 
@@ -94,6 +97,34 @@ app.post("/api/auth/login", async (req, res) => {
         data: {
             token,
             user: { id: user.id, name: user.name, email: user.email, role: user.role },
+        },
+        error: null,
+    });
+});
+
+app.post("/api/hotels", verifyUser, requireRole("owner"), async (req, res) => {
+    const { success, data } = HotelSchema.safeParse(req.body);
+    if (!success)
+        return res.status(400).json({ success, data: null, error: "INVALID_SCHEMA" });
+
+    const hotel = await prisma.hotels.create({
+        data: {
+            ...data,
+            owner_id: req.userId,
+        },
+    });
+    res.status(201).json({
+        success,
+        data: {
+            id: hotel.id,
+            ownerId: hotel.owner_id,
+            name: hotel.name,
+            description: hotel.description,
+            city: hotel.city,
+            country: hotel.country,
+            amenities: hotel.amenities,
+            rating: hotel.rating,
+            totalReviews: hotel.total_reviews,
         },
         error: null,
     });
