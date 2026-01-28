@@ -8,7 +8,7 @@ import { prisma } from "./db/db";
 import jwt from "jsonwebtoken";
 import { verifyUser } from "./middlewares/verifyUser";
 import { requireRole } from "./middlewares/requireRole";
-import { HotelSchema } from "./schema/HotelSchema";
+import { HotelSchema, RoomSchema } from "./schema/HotelSchema";
 
 const { sign } = jwt;
 
@@ -129,6 +129,79 @@ app.post("/api/hotels", verifyUser, requireRole("owner"), async (req, res) => {
         error: null,
     });
 });
+
+app.post(
+    "/api/hotels/:hotelId/rooms",
+    verifyUser,
+    requireRole("owner"),
+    async (req, res) => {
+        const { hotelId } = req.params;
+
+        const { success, data } = RoomSchema.safeParse({
+            ...req.body,
+            hotelId: Number(hotelId),
+        });
+        if (!success)
+            return res.status(400).json({
+                success: false,
+                data: null,
+                error: "INVALID_REQUEST",
+            });
+
+        const hotel = await prisma.hotels.findUnique({
+            where: {
+                id: Number(hotelId),
+            },
+            include: {
+                rooms: true,
+            },
+        });
+
+        if (!hotel)
+            return res.status(404).json({
+                success: false,
+                data: null,
+                error: "HOTEL_NOT_FOUND",
+            });
+        else if (hotel.owner_id != req.userId)
+            return res.status(403).json({
+                success: false,
+                data: null,
+                error: "FORBIDDEN",
+            });
+
+        const roomExisted = hotel.rooms.filter((r) => r.room_number == data.roomNumber);
+
+        if (roomExisted[0])
+            return res.status(400).json({
+                success: false,
+                data: null,
+                error: "ROOM_ALREADY_EXISTS",
+            });
+        const newRoom = await prisma.rooms.create({
+            data: {
+                room_number: data.roomNumber,
+                room_type: data.roomType,
+                price_per_night: data.pricePerNight,
+                max_occupancy: data.maxOccupancy,
+                hotel_id: data.hotelId,
+            },
+        });
+
+        res.status(201).json({
+            success: true,
+            data: {
+                id: newRoom.id,
+                hotelId: hotel.id,
+                roomNumber: newRoom.room_number,
+                roomType: newRoom.room_type,
+                pricePerNight: newRoom.price_per_night,
+                maxOccupancy: newRoom.max_occupancy,
+            },
+            error: null,
+        });
+    },
+);
 
 app.use(globalErrorHandler);
 
