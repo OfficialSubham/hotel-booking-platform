@@ -8,7 +8,12 @@ import { prisma } from "./db/db";
 import jwt from "jsonwebtoken";
 import { verifyUser } from "./middlewares/verifyUser";
 import { requireRole } from "./middlewares/requireRole";
-import { HotelQueryParameters, HotelSchema, RoomSchema } from "./schema/HotelSchema";
+import {
+    HotelIdSchema,
+    HotelQueryParameters,
+    HotelSchema,
+    RoomSchema,
+} from "./schema/HotelSchema";
 
 const { sign } = jwt;
 
@@ -269,6 +274,64 @@ app.get("/api/hotels", verifyUser, async (req, res) => {
     }
 
     return res.json({ success: true, data: responseData, error: null });
+});
+
+app.get("/api/hotels/:hotelId", verifyUser, async (req, res) => {
+    const { hotelId } = req.params;
+    const { success, data } = HotelIdSchema.safeParse(hotelId);
+    if (!success)
+        return res.status(404).json({
+            success: false,
+            data: null,
+            error: "HOTEL_NOT_FOUND",
+        });
+    const hotel = await prisma.hotels.findUnique({
+        where: {
+            id: data,
+        },
+        omit: {
+            created_at: true,
+        },
+        include: {
+            rooms: {
+                omit: {
+                    hotel_id: true,
+                    created_at: true,
+                },
+            },
+        },
+    });
+    if (!hotel)
+        return res.status(404).json({
+            success: false,
+            data: null,
+            error: "HOTEL_NOT_FOUND",
+        });
+    const hotelRooms = hotel.rooms.map((r) => {
+        return {
+            id: r.id,
+            roomNumber: r.room_number,
+            roomType: r.room_type,
+            pricePerNight: r.price_per_night,
+            maxOccupancy: r.max_occupancy,
+        };
+    });
+    return res.json({
+        success: true,
+        data: {
+            id: hotel.id,
+            ownerId: hotel.owner_id,
+            name: hotel.name,
+            description: hotel.description,
+            city: hotel.city,
+            country: hotel.country,
+            amenities: hotel.amenities,
+            rating: hotel.rating,
+            totalReviews: hotel.total_reviews,
+            rooms: hotelRooms,
+        },
+        error: null,
+    });
 });
 
 app.use(globalErrorHandler);

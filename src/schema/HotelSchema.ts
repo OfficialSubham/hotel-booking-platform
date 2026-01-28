@@ -29,3 +29,5 @@ export const HotelQueryParameters = z
         minRating: z.coerce.number().min(0).max(5).optional(),
     })
     .strict();
+
+export const HotelIdSchema = z.coerce.number();
