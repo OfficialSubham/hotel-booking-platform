@@ -19,3 +19,13 @@ export const RoomSchema = z
         hotelId: z.number(),
     })
     .strict();
+
+export const HotelQueryParameters = z
+    .object({
+        city: z.string().optional(),
+        country: z.string().optional(),
+        minPrice: z.coerce.number().nonnegative().optional(),
+        maxPrice: z.coerce.number().nonnegative().optional(),
+        minRating: z.coerce.number().min(0).max(5).optional(),
+    })
+    .strict();

@@ -8,7 +8,7 @@ import { prisma } from "./db/db";
 import jwt from "jsonwebtoken";
 import { verifyUser } from "./middlewares/verifyUser";
 import { requireRole } from "./middlewares/requireRole";
-import { HotelSchema, RoomSchema } from "./schema/HotelSchema";
+import { HotelQueryParameters, HotelSchema, RoomSchema } from "./schema/HotelSchema";
 
 const { sign } = jwt;
 
@@ -28,7 +28,6 @@ app.post("/api/auth/signup", async (req, res) => {
     try {
         const { success, data, error } = SignupSchema.safeParse(req.body);
         if (!success) {
-            console.log(error);
             return res
                 .status(400)
                 .json({ success, data: null, error: "INVALID_REQUEST" });
@@ -202,6 +201,75 @@ app.post(
         });
     },
 );
+
+app.get("/api/hotels", verifyUser, async (req, res) => {
+    const { success, data } = HotelQueryParameters.safeParse(req.query);
+    //Getting hotels with prefer querys
+    const hotels = await prisma.hotels.findMany({
+        where: {
+            city: {
+                equals: data?.city,
+                mode: "insensitive",
+            },
+            country: {
+                equals: data?.country,
+                mode: "insensitive",
+            },
+            rating: {
+                gte: data?.minRating,
+            },
+            rooms: {
+                some: {},
+            },
+        },
+        include: {
+            rooms: true,
+        },
+    });
+
+    if (!hotels.length)
+        return res.json({
+            success: true,
+            data: [],
+            error: null,
+        });
+    //Filtering hotels for the response
+    let responseData = hotels.map((eachHotel) => {
+        let minRoomPrice = Number.MAX_SAFE_INTEGER;
+        eachHotel.rooms.forEach((r) => {
+            minRoomPrice = Math.min(Number(r.price_per_night), minRoomPrice);
+        });
+        return {
+            id: eachHotel.id,
+            name: eachHotel.name,
+            description: eachHotel.description,
+            city: eachHotel.city,
+            country: eachHotel.country,
+            amenities: eachHotel.amenities,
+            rating: eachHotel.rating,
+            totalReviews: eachHotel.total_reviews,
+            minPricePerNight: minRoomPrice,
+        };
+    });
+
+    //Checking for Minimum price requirement for user
+    if (data && data.minPrice != 0) {
+        const miniPrice = data.minPrice || 0;
+        responseData = responseData.filter(
+            (eachHotel) => eachHotel.minPricePerNight >= miniPrice,
+        );
+    }
+
+    //Checking for Maximum price requirement for user
+    if (data && data.maxPrice != 0) {
+        const maxPrice = data.maxPrice || Number.MAX_SAFE_INTEGER;
+        responseData = responseData.filter(
+            (eachHotel) => eachHotel.minPricePerNight <= maxPrice,
+        );
+    }
+
+    return res.json({ success: true, data: responseData, error: null });
+});
 
 app.use(globalErrorHandler);
 
