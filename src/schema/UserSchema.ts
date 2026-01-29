@@ -5,7 +5,7 @@ export const SignupSchema = z
         name: z.string(),
         email: z.string().email(),
         password: z.string().min(4),
-        role: z.enum(["customer", "owner"]),
+        role: z.enum(["customer", "owner"]).default("customer"),
         phone: z.string().min(10).max(13).optional(),
     })
     .strict();

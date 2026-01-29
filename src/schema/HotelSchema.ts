@@ -44,7 +44,7 @@ export const BookingStatus = z.enum(["confirmed", "cancelled"]).optional();
 export const HotelReview = z
     .object({
         bookingId: z.coerce.number(),
-        rating: z.number().min(1).max(5),
+        rating: z.number().gte(1).lte(5),
         comment: z.string().optional(),
     })
     .strict();

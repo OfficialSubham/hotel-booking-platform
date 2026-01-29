@@ -89,7 +89,7 @@ app.post("/api/auth/login", async (req, res) => {
     });
     if (!user)
         return res
-            .status(400)
+            .status(401)
             .json({ success: false, data: null, error: "INVALID_CREDENTIALS" });
     const isPasswordCorrect = await compare(data.password, user.password);
     if (!isPasswordCorrect)
@@ -104,7 +104,12 @@ app.post("/api/auth/login", async (req, res) => {
         success,
         data: {
             token,
-            user: { id: user.id, name: user.name, email: user.email, role: user.role },
+            user: {
+                id: user.id,
+                name: user.name,
+                email: user.email,
+                role: user.role,
+            },
         },
         error: null,
     });
@@ -113,7 +118,7 @@ app.post("/api/auth/login", async (req, res) => {
 app.post("/api/hotels", verifyUser, requireRole("owner"), async (req, res) => {
     const { success, data } = HotelSchema.safeParse(req.body);
     if (!success)
-        return res.status(400).json({ success, data: null, error: "INVALID_SCHEMA" });
+        return res.status(400).json({ success, data: null, error: "INVALID_REQUEST" });
 
     const hotel = await prisma.hotels.create({
         data: {
@@ -131,7 +136,7 @@ app.post("/api/hotels", verifyUser, requireRole("owner"), async (req, res) => {
             city: hotel.city,
             country: hotel.country,
             amenities: hotel.amenities,
-            rating: hotel.rating,
+            rating: Number(hotel.rating),
             totalReviews: hotel.total_reviews,
         },
         error: null,
@@ -144,7 +149,12 @@ app.post(
     requireRole("owner"),
     async (req, res) => {
         const { hotelId } = req.params;
-
+        if (isNaN(Number(hotelId)))
+            return res.status(404).json({
+                success: false,
+                data: null,
+                error: "HOTEL_NOT_FOUND",
+            });
         const { success, data } = RoomSchema.safeParse({
             ...req.body,
             hotelId: Number(hotelId),
@@ -203,7 +213,7 @@ app.post(
                 hotelId: hotel.id,
                 roomNumber: newRoom.room_number,
                 roomType: newRoom.room_type,
-                pricePerNight: newRoom.price_per_night,
+                pricePerNight: Number(newRoom.price_per_night),
                 maxOccupancy: newRoom.max_occupancy,
             },
             error: null,
@@ -255,7 +265,7 @@ app.get("/api/hotels", verifyUser, async (req, res) => {
             city: eachHotel.city,
             country: eachHotel.country,
             amenities: eachHotel.amenities,
-            rating: eachHotel.rating,
+            rating: Number(eachHotel.rating),
             totalReviews: eachHotel.total_reviews,
             minPricePerNight: minRoomPrice,
         };
@@ -282,6 +292,14 @@ app.get("/api/hotels", verifyUser, async (req, res) => {
 
 app.get("/api/hotels/:hotelId", verifyUser, async (req, res) => {
     const { hotelId } = req.params;
+
+    if (isNaN(Number(hotelId)))
+        return res.status(404).json({
+            success: false,
+            data: null,
+            error: "HOTEL_NOT_FOUND",
+        });
+
     const { success, data } = HotelIdSchema.safeParse(hotelId);
     if (!success)
         return res.status(404).json({
@@ -316,7 +334,7 @@ app.get("/api/hotels/:hotelId", verifyUser, async (req, res) => {
             id: r.id,
             roomNumber: r.room_number,
             roomType: r.room_type,
-            pricePerNight: r.price_per_night,
+            pricePerNight: Number(r.price_per_night),
             maxOccupancy: r.max_occupancy,
         };
     });
@@ -330,7 +348,7 @@ app.get("/api/hotels/:hotelId", verifyUser, async (req, res) => {
             city: hotel.city,
             country: hotel.country,
             amenities: hotel.amenities,
-            rating: hotel.rating,
+            rating: Number(hotel.rating),
             totalReviews: hotel.total_reviews,
             rooms: hotelRooms,
         },
@@ -339,6 +357,12 @@ app.get("/api/hotels/:hotelId", verifyUser, async (req, res) => {
 });
 
 app.post("/api/bookings", verifyUser, requireRole("customer"), async (req, res) => {
+    if (req.body.roomId && isNaN(Number(req.body.roomId)))
+        return res.status(404).json({
+            success: false,
+            data: null,
+            error: "ROOM_NOT_FOUND",
+        });
     const { data, success } = BookingSchema.safeParse(req.body);
 
     if (!success)
@@ -352,18 +376,18 @@ app.post("/api/bookings", verifyUser, requireRole("customer"), async (req, res) 
     const checkOutDate = new Date(data.checkOutDate);
     const currentDate = new Date();
     //Checking for date validity
-    if (
-        data.checkInDate == data.checkOutDate ||
-        checkInDate > checkOutDate ||
-        checkInDate < currentDate ||
-        checkOutDate < currentDate
-    )
+    if (checkInDate < currentDate || checkOutDate < currentDate)
         return res.status(400).json({
             success: false,
             data: null,
             error: "INVALID_DATES",
         });
-
+    else if (checkInDate > checkOutDate)
+        return res.status(400).json({
+            success: false,
+            data: null,
+            error: "INVALID_REQUEST",
+        });
     const room = await prisma.rooms.findUnique({
         where: {
             id: data.roomId,
@@ -391,6 +415,7 @@ app.post("/api/bookings", verifyUser, requireRole("customer"), async (req, res) 
         if (booking.status != "cancelled") {
             if (checkInDate.getTime() == booking.check_in_date.getTime()) {
                 //Exact checking date check
+
                 isRoomAvailable = false;
                 return;
             } else if (
@@ -405,11 +430,12 @@ app.post("/api/bookings", verifyUser, requireRole("customer"), async (req, res) 
                 Here i am checking in this way 
                 if my checking date is lesser than the booking date but my checkout date is falling under someone else's booking date
                 */
+
                 isRoomAvailable = false;
                 return;
             } else if (
                 checkInDate.getTime() > booking.check_in_date.getTime() &&
-                checkInDate.getTime() <= booking.check_out_date.getTime() &&
+                checkInDate.getTime() < booking.check_out_date.getTime() &&
                 (checkOutDate.getTime() >= booking.check_out_date.getTime() ||
                     checkOutDate.getTime() < booking.check_out_date.getTime())
             ) {
@@ -419,7 +445,6 @@ app.post("/api/bookings", verifyUser, requireRole("customer"), async (req, res) 
                 Here i am checking weather my booking is falling under someone else booking
                 like if my cheking date is under someone else's booking and checkout date then doesnot matters then
                 */
-
                 isRoomAvailable = false;
                 return;
             }
@@ -449,24 +474,23 @@ app.post("/api/bookings", verifyUser, requireRole("customer"), async (req, res) 
             room: true,
         },
     });
-    res.status(200).json({
+    res.status(201).json({
         success: true,
-        data: [
-            {
-                id: roomBooking.id,
-                roomId: roomBooking.room_id,
-                hotelId: roomBooking.hotel_id,
-                hotelName: roomBooking.hotel.name,
-                roomNumber: roomBooking.room.room_number,
-                roomType: roomBooking.room.room_type,
-                checkInDate,
-                checkOutDate,
-                guests: roomBooking.guests,
-                totalPrice,
-                status: roomBooking.status,
-                bookingDate: roomBooking.booking_date,
-            },
-        ],
+        data: {
+            id: roomBooking.id,
+            roomId: roomBooking.room_id,
+            hotelId: roomBooking.hotel_id,
+            hotelName: roomBooking.hotel.name,
+            roomNumber: roomBooking.room.room_number,
+            roomType: roomBooking.room.room_type,
+            checkInDate,
+            checkOutDate,
+            guests: roomBooking.guests,
+            totalPrice,
+            status: roomBooking.status,
+            bookingDate: roomBooking.booking_date,
+        },
+
         error: null,
     });
 });
@@ -513,7 +537,12 @@ app.put(
     requireRole("customer"),
     async (req, res) => {
         const { bookingId } = req.params;
-
+        if (isNaN(Number(bookingId)))
+            return res.status(404).json({
+                success: false,
+                data: null,
+                error: "BOOKING_NOT_FOUND",
+            });
         const booking = await prisma.bookings.findUnique({
             where: {
                 id: Number(bookingId),
@@ -571,12 +600,21 @@ app.put(
 );
 
 app.post("/api/reviews", verifyUser, requireRole("customer"), async (req, res) => {
+    const { bookingId } = req.body;
+
     const { success, data } = HotelReview.safeParse(req.body);
     if (!success)
         return res.status(400).json({
             success: false,
             data: null,
             error: "INVALID_REQUEST",
+        });
+
+    if (bookingId && isNaN(Number(bookingId)))
+        return res.status(404).json({
+            success: false,
+            data: null,
+            error: "BOOKING_NOT_FOUND",
         });
     const booking = await prisma.bookings.findUnique({
         where: {
@@ -637,7 +675,7 @@ app.post("/api/reviews", verifyUser, requireRole("customer"), async (req, res) =
             userId: review.user_id,
             hotelId: review.hotel_id,
             bookingId: review.booking_id,
-            rating: review.rating,
+            rating: Number(review.rating),
             comment: review.comment,
             createdAt: review.create_at,
         },
