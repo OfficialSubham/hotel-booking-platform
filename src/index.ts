@@ -10,6 +10,7 @@ import { verifyUser } from "./middlewares/verifyUser";
 import { requireRole } from "./middlewares/requireRole";
 import {
     BookingSchema,
+    BookingStatus,
     HotelIdSchema,
     HotelQueryParameters,
     HotelSchema,
@@ -465,6 +466,42 @@ app.post("/api/bookings", verifyUser, requireRole("customer"), async (req, res) 
                 bookingDate: roomBooking.booking_date,
             },
         ],
+        error: null,
+    });
+});
+
+app.get("/api/bookings", verifyUser, requireRole("customer"), async (req, res) => {
+    const { data } = BookingStatus.safeParse(req.query.status);
+    const bookings = await prisma.bookings.findMany({
+        where: {
+            user_id: req.userId,
+            status: data,
+        },
+        include: {
+            hotel: true,
+            room: true,
+        },
+    });
+    const responseBookings = bookings.map((b) => {
+        return {
+            id: b.id,
+            roomId: b.room_id,
+            hotelId: b.hotel_id,
+            hotelName: b.hotel.name,
+            roomNumber: b.room.room_number,
+            roomType: b.room.room_type,
+            checkInDate: b.check_in_date,
+            checkOutDate: b.check_out_date,
+            guests: b.guests,
+            totalPrice: b.total_price,
+            status: b.status,
+            bookingDate: b.booking_date,
+        };
+    });
+
+    res.json({
+        success: true,
+        data: responseBookings,
         error: null,
     });
 });

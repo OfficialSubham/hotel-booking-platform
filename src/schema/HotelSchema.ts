@@ -38,3 +38,5 @@ export const BookingSchema = z.object({
     checkOutDate: z.string().date(),
     guests: z.number(),
 });
+
+export const BookingStatus = z.enum(["confirmed", "cancelled"]).optional();
