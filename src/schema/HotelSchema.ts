@@ -3,7 +3,7 @@ import z from "zod";
 export const HotelSchema = z
     .object({
         name: z.string(),
-        description: z.string(),
+        description: z.string().optional(),
         city: z.string(),
         country: z.string(),
         amenities: z.string().array().optional(),
@@ -45,6 +45,6 @@ export const HotelReview = z
     .object({
         bookingId: z.coerce.number(),
         rating: z.number().min(1).max(5),
-        comment: z.string(),
+        comment: z.string().optional(),
     })
     .strict();

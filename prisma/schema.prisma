@@ -19,7 +19,7 @@ model User {
   email      String     @unique
   password   String
   role       UserRole
-  phone      String
+  phone      String?
   created_at DateTime   @default(now())
   hotels     Hotels[]
   bookings   Bookings[]
@@ -30,7 +30,7 @@ model Hotels {
   id            Int        @id @default(autoincrement())
   owner_id      Int
   name          String
-  description   String
+  description   String?
   city          String
   country       String
   amenities     String[]   @default([])
@@ -79,7 +79,7 @@ model Reviews {
   hotel_id   Int
   booking_id Int      @unique
   rating     Int
-  comment    String
+  comment    String?
   create_at  DateTime @default(now())
   user       User     @relation(fields: [user_id], references: [id])
   hotel      Hotels   @relation(fields: [hotel_id], references: [id])
