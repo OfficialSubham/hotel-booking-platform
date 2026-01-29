@@ -13,6 +13,7 @@ import {
     BookingStatus,
     HotelIdSchema,
     HotelQueryParameters,
+    HotelReview,
     HotelSchema,
     RoomSchema,
 } from "./schema/HotelSchema";
@@ -568,6 +569,81 @@ app.put(
         });
     },
 );
+
+app.post("/api/reviews", verifyUser, requireRole("customer"), async (req, res) => {
+    const { success, data } = HotelReview.safeParse(req.body);
+    if (!success)
+        return res.status(400).json({
+            success: false,
+            data: null,
+            error: "INVALID_REQUEST",
+        });
+    const booking = await prisma.bookings.findUnique({
+        where: {
+            id: data.bookingId,
+        },
+    });
+
+    if (!booking)
+        return res.status(404).json({
+            success: false,
+            data: null,
+            error: "BOOKING_NOT_FOUND",
+        });
+    else if (booking.user_id != req.userId)
+        return res.status(403).json({
+            success: false,
+            data: null,
+            error: "FORBIDDEN",
+        });
+
+    const currentDate = new Date();
+    const checkOutDate = new Date(booking.check_out_date);
+    const canReview =
+        checkOutDate.getTime() < currentDate.getTime() && booking.status == "confirmed";
+    if (!canReview)
+        return res.status(400).json({
+            success: false,
+            data: null,
+            error: "BOOKING_NOT_ELIGIBLE",
+        });
+
+    const alreadyReviewed = await prisma.reviews.findUnique({
+        where: {
+            booking_id: data.bookingId,
+            user_id: req.userId,
+        },
+    });
+    if (alreadyReviewed)
+        return res.status(400).json({
+            success: false,
+            data: null,
+            error: "ALREADY_REVIEWED",
+        });
+
+    const review = await prisma.reviews.create({
+        data: {
+            user_id: req.userId,
+            booking_id: data.bookingId,
+            hotel_id: booking.hotel_id,
+            comment: data.comment,
+            rating: data.rating,
+        },
+    });
+    return res.status(201).json({
+        success: true,
+        data: {
+            id: review.id,
+            userId: review.user_id,
+            hotelId: review.hotel_id,
+            bookingId: review.booking_id,
+            rating: review.rating,
+            comment: review.comment,
+            createdAt: review.create_at,
+        },
+        error: null,
+    });
+});
 
 app.use(globalErrorHandler);
 
