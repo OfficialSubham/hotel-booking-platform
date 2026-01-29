@@ -31,3 +31,10 @@ export const HotelQueryParameters = z
     .strict();
 
 export const HotelIdSchema = z.coerce.number();
+
+export const BookingSchema = z.object({
+    roomId: z.coerce.number(),
+    checkInDate: z.string().date(),
+    checkOutDate: z.string().date(),
+    guests: z.number(),
+});

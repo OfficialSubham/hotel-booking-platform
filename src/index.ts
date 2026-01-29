@@ -9,11 +9,13 @@ import jwt from "jsonwebtoken";
 import { verifyUser } from "./middlewares/verifyUser";
 import { requireRole } from "./middlewares/requireRole";
 import {
+    BookingSchema,
     HotelIdSchema,
     HotelQueryParameters,
     HotelSchema,
     RoomSchema,
 } from "./schema/HotelSchema";
+import { substractDates } from "./libs/utils";
 
 const { sign } = jwt;
 
@@ -330,6 +332,139 @@ app.get("/api/hotels/:hotelId", verifyUser, async (req, res) => {
             totalReviews: hotel.total_reviews,
             rooms: hotelRooms,
         },
+        error: null,
+    });
+});
+
+app.post("/api/bookings", verifyUser, requireRole("customer"), async (req, res) => {
+    const { data, success } = BookingSchema.safeParse(req.body);
+
+    if (!success)
+        return res.status(400).json({
+            success: false,
+            data: null,
+            error: "INVALID_REQUEST",
+        });
+
+    const checkInDate = new Date(data.checkInDate);
+    const checkOutDate = new Date(data.checkOutDate);
+    const currentDate = new Date();
+    //Checking for date validity
+    if (
+        data.checkInDate == data.checkOutDate ||
+        checkInDate > checkOutDate ||
+        checkInDate < currentDate ||
+        checkOutDate < currentDate
+    )
+        return res.status(400).json({
+            success: false,
+            data: null,
+            error: "INVALID_DATES",
+        });
+
+    const room = await prisma.rooms.findUnique({
+        where: {
+            id: data.roomId,
+        },
+        include: {
+            bookings: true,
+        },
+    });
+
+    if (!room)
+        return res.status(404).json({
+            success: false,
+            data: null,
+            error: "ROOM_NOT_FOUND",
+        });
+    else if (room.max_occupancy < data.guests)
+        return res.status(400).json({
+            success: false,
+            data: null,
+            error: "INVALID_CAPACITY",
+        });
+    let isRoomAvailable = true;
+    room.bookings.forEach((booking) => {
+        //If the booking is not cancelled then check
+        if (booking.status != "cancelled") {
+            if (checkInDate.getTime() == booking.check_in_date.getTime()) {
+                //Exact checking date check
+                isRoomAvailable = false;
+                return;
+            } else if (
+                checkInDate.getTime() < booking.check_in_date.getTime() &&
+                (checkOutDate.getTime() >= booking.check_out_date.getTime() ||
+                    (checkOutDate.getTime() <= booking.check_out_date.getTime() &&
+                        checkOutDate.getTime() >= booking.check_in_date.getTime()))
+            ) {
+                //Checking someone else's booking falls under my booking
+
+                /*
+                Here i am checking in this way 
+                if my checking date is lesser than the booking date but my checkout date is falling under someone else's booking date
+                */
+                isRoomAvailable = false;
+                return;
+            } else if (
+                checkInDate.getTime() > booking.check_in_date.getTime() &&
+                checkInDate.getTime() <= booking.check_out_date.getTime() &&
+                (checkOutDate.getTime() >= booking.check_out_date.getTime() ||
+                    checkOutDate.getTime() < booking.check_out_date.getTime())
+            ) {
+                //Checking my booking falls under someone else's booking
+
+                /*
+                Here i am checking weather my booking is falling under someone else booking
+                like if my cheking date is under someone else's booking and checkout date then doesnot matters then
+                */
+
+                isRoomAvailable = false;
+                return;
+            }
+        }
+    });
+
+    if (!isRoomAvailable)
+        return res.status(400).json({
+            success: false,
+            data: null,
+            error: "ROOM_NOT_AVAILABLE",
+        });
+    const totalPrice =
+        substractDates(checkInDate, checkOutDate) * Number(room.price_per_night);
+    const roomBooking = await prisma.bookings.create({
+        data: {
+            check_in_date: checkInDate,
+            check_out_date: checkOutDate,
+            guests: data.guests,
+            total_price: totalPrice,
+            user_id: req.userId,
+            room_id: room.id,
+            hotel_id: room.hotel_id,
+        },
+        include: {
+            hotel: true,
+            room: true,
+        },
+    });
+    res.status(200).json({
+        success: true,
+        data: [
+            {
+                id: roomBooking.id,
+                roomId: roomBooking.room_id,
+                hotelId: roomBooking.hotel_id,
+                hotelName: roomBooking.hotel.name,
+                roomNumber: roomBooking.room.room_number,
+                roomType: roomBooking.room.room_type,
+                checkInDate,
+                checkOutDate,
+                guests: roomBooking.guests,
+                totalPrice,
+                status: roomBooking.status,
+                bookingDate: roomBooking.booking_date,
+            },
+        ],
         error: null,
     });
 });
