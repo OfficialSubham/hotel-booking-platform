@@ -506,6 +506,69 @@ app.get("/api/bookings", verifyUser, requireRole("customer"), async (req, res) =
     });
 });
 
+app.put(
+    "/api/bookings/:bookingId/cancel",
+    verifyUser,
+    requireRole("customer"),
+    async (req, res) => {
+        const { bookingId } = req.params;
+
+        const booking = await prisma.bookings.findUnique({
+            where: {
+                id: Number(bookingId),
+            },
+        });
+
+        if (!booking)
+            return res.status(404).json({
+                success: false,
+                data: null,
+                error: "BOOKING_NOT_FOUND",
+            });
+        else if (booking.user_id != req.userId)
+            return res.status(403).json({
+                success: false,
+                data: null,
+                error: "FORBIDDEN",
+            });
+        else if (booking.status == "cancelled")
+            return res.status(400).json({
+                success: false,
+                data: null,
+                error: "ALREADY_CANCELLED",
+            });
+        const currentDate = new Date();
+
+        const timeRemaining = substractDates(currentDate, booking.check_in_date);
+
+        if (timeRemaining < 1)
+            return res.status(400).json({
+                success: false,
+                data: null,
+                error: "CANCELLATION_DEADLINE_PASSED",
+            });
+
+        const bookingDetails = await prisma.bookings.update({
+            where: {
+                id: Number(bookingId),
+            },
+            data: {
+                cancelled_at: new Date(),
+                status: "cancelled",
+            },
+        });
+        res.json({
+            success: true,
+            data: {
+                id: bookingDetails.id,
+                status: bookingDetails.status,
+                cancelledAt: booking.cancelled_at,
+            },
+            error: null,
+        });
+    },
+);
+
 app.use(globalErrorHandler);
 
 app.listen(PORT, () => {
